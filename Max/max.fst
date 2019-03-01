@@ -3,6 +3,7 @@ type = body+head
 scale = 1
 filename = 58d6c073-1806-5940-9af0-be27e8ebfa37.fbx
 texdir = textures
+script = flow.js
 joint = jointRoot = Hips
 joint = jointLean = Spine
 joint = jointNeck = Neck
