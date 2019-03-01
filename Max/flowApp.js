@@ -14,10 +14,10 @@
 
 (function(){
     Script.registerValue("FLOWAPP", true);
-    Script.include(Script.resolvePath("./flow.js"));
+    Script.include(Script.resolvePath("https://hifi-content.s3.amazonaws.com/luis/flowFiles/flow.js"));
 
     var TABLET_BUTTON_NAME = "FLOW";
-    var HTML_URL = Script.resolvePath("./flowApp.html");
+    var HTML_URL = Script.resolvePath("https://hifi-content.s3.amazonaws.com/luis/flowFiles/flowApp.html");
     
     var MSG_DOCUMENT_LOADED = 0;
     var MSG_JOINT_INPUT_DATA = 1;
@@ -29,8 +29,8 @@
     var tablet = Tablet.getTablet("com.highfidelity.interface.tablet.system");
     var tabletButton = tablet.addButton({
         text: TABLET_BUTTON_NAME,
-        icon: Script.resolvePath("./flow-i.svg"),
-        activeIcon: Script.resolvePath("./flow-a.svg")
+        icon: Script.resolvePath("https://hifi-content.s3.amazonaws.com/luis/flowFiles/flow-i.svg"),
+        activeIcon: Script.resolvePath("https://hifi-content.s3.amazonaws.com/luis/flowFiles/flow-a.svg")
     });
     
     var shown = false;
