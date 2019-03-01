@@ -13,14 +13,14 @@
 */
 
 Script.include("/~/system/libraries/Xform.js");
-Script.include(Script.resolvePath("./VectorMath.js"));
+Script.include(Script.resolvePath("https://hifi-content.s3.amazonaws.com/luis/flowFiles/VectorMath.js"));
 
 (function(){
     var SHOW_AVATAR = true;
     var SHOW_DEBUG_SHAPES = false;
     var SHOW_SOLID_SHAPES = false;
     var SHOW_DUMMY_JOINTS = false;
-    var USE_COLLISIONS = false;
+    var USE_COLLISIONS = true;
     
     var HAPTIC_TOUCH_STRENGTH = 0.25;
     var HAPTIC_TOUCH_DURATION = 10.0;
@@ -82,8 +82,8 @@ Script.include(Script.resolvePath("./VectorMath.js"));
     CUSTOM_FLOW_DATA = {
         "hair": {
             "active": true,
-            "stiffness": 0.35,
-            "radius": 0.03,
+            "stiffness": 0.0,
+            "radius": 0.04,
             "gravity": -0.035,
             "damping": 0.8,
             "inertia": 0.8,
@@ -94,7 +94,7 @@ Script.include(Script.resolvePath("./VectorMath.js"));
     CUSTOM_COLLISION_DATA = {
         "Spine2": {
             "type": "sphere",
-            "radius": 0.11,
+            "radius": 0.14,
             "offset": {
                 "x": 0,
                 "y": 0.2,
@@ -103,7 +103,7 @@ Script.include(Script.resolvePath("./VectorMath.js"));
         },
         "RightArm": {
             "type": "sphere",
-            "radius": 0.05,
+            "radius": 0.03,
             "offset": {
                 "x": 0,
                 "y": 0.02,
@@ -112,7 +112,7 @@ Script.include(Script.resolvePath("./VectorMath.js"));
         },
         "LeftArm": {
             "type": "sphere",
-            "radius": 0.05,
+            "radius": 0.03,
             "offset": {
                 "x": 0,
                 "y": 0.02,
@@ -139,6 +139,8 @@ Script.include(Script.resolvePath("./VectorMath.js"));
         FLOW_JOINT_KEYWORDS.push(DUMMY_KEYWORD);
         FLOW_JOINT_DATA[DUMMY_KEYWORD] = DEFAULT_JOINT_SETTINGS.get();
     }
+    
+    var avatarScale = MyAvatar.scale;
     
     var FlowDebug = function() {
         var self = this;
@@ -641,7 +643,6 @@ Script.include(Script.resolvePath("./VectorMath.js"));
         this.modifyCollision = function(jointName, parameter, value) {
             var jointIndex = MyAvatar.getJointIndex(jointName);
             var collisionIndex = self.findCollisionWithJoint(jointIndex);
-            var avatarScale = MyAvatar.scale;
             if (collisionIndex > -1) {
                 switch(parameter) {
                     case "radius": {
@@ -839,11 +840,10 @@ Script.include(Script.resolvePath("./VectorMath.js"));
                 
                 // Add offset
                 self.acceleration = VEC3.sum(self.acceleration, accelerationOffset);
-                
                 // Calculate new position
                 self.currentPosition = VEC3.sum(
                     VEC3.sum(self.currentPosition, VEC3.multiply(self.currentVelocity, self.damping)), 
-                    VEC3.multiply(self.acceleration, Math.pow(self.delta, 2))
+                    VEC3.multiply(self.acceleration, Math.pow((self.delta * avatarScale), 2))
                 );                
             } else {
                 self.acceleration = {x:0, y:0, z:0};
@@ -906,6 +906,7 @@ Script.include(Script.resolvePath("./VectorMath.js"));
         this.translationDirection = VEC3.normalize(this.initialXform.pos);
         
         this.length = VEC3.length(VEC3.subtract(this.initialPosition, MyAvatar.getJointPosition(self.parentIndex)));
+        this.originalLength = this.length / avatarScale;
         
         this.update = function () {
             var accelerationOffset = {x: 0, y: 0, z: 0};
@@ -952,8 +953,16 @@ Script.include(Script.resolvePath("./VectorMath.js"));
         var self = this;
         this.joints = [];
         this.positions = [];
-        this.radius = 0;
-        this.length = 0;
+        this.radius = 0.0;
+        this.length = 0.0;
+        
+        this.resetLength = function() {
+            self.length = 0.0;
+            for (i = 1; i < self.joints.length; i++) {
+                var index = self.joints[i];
+                self.length += flowJointData[index].length;
+            }
+        }
         
         this.computeThread = function(rootIndex) {
             var parentIndex = rootIndex;
@@ -1152,8 +1161,11 @@ Script.include(Script.resolvePath("./VectorMath.js"));
         for (var i = 0; i < flowThreads.length; i++) {
             for (var j = 0; j < flowThreads[i].joints.length; j++){
                 var joint = flowJointData[flowThreads[i].joints[j]];
-                joint.node.radius = joint.node.initialRadius * scale;
+                var deltaScale =  joint.node.initialRadius * scale / joint.node.radius;
+                joint.node.radius *= deltaScale;
+                joint.length = joint.originalLength * scale;
             }
+            flowThreads[i].resetLength();
         }
     };
 
@@ -1165,11 +1177,12 @@ Script.include(Script.resolvePath("./VectorMath.js"));
                 var namesplit = name.split("_");
                 console.log("FLOW checking: " + name);
                 var isSimJoint = (name.substring(0, 3).toUpperCase() === SIM_JOINT_PREFIX.toUpperCase());
-                var isFlowJoint = (namesplit.length > 2 &&
+                var isFlowJoint = (namesplit.length > 2 && 
                                     namesplit[0].toUpperCase() === FLOW_JOINT_PREFIX.toUpperCase());
                 if (isFlowJoint || isSimJoint) {
                     var group = undefined;
-                    if (isSimJoint) {
+                    if (isSimJoint) { 
+                    console.log("FLOW is sim: " + name);
                         for (var k = 1; k < name.length-1; k++) {
                             var subname = parseFloat(name.substring(name.length-k));
                             if (isNaN(subname) && name.length-k > SIM_JOINT_PREFIX.length) {
@@ -1193,13 +1206,13 @@ Script.include(Script.resolvePath("./VectorMath.js"));
                         } else {
                             jointSettings = DEFAULT_JOINT_SETTINGS.get();
                         }
-
+                        
                         FLOW_JOINT_DATA[group] = jointSettings;
                         if (flowJointData[jointInfo.index] === undefined) {
                             flowJointData[jointInfo.index] = new FlowJoint(jointInfo.index, jointInfo.parentIndex, name, group, jointSettings);
-                        }
+                        } 
                     }
-                }
+                } 
                 else {
                     var collisionSettings = (collisionKeys.length > 0) ? CUSTOM_COLLISION_DATA[name] : PRESET_COLLISION_DATA[name];
                     if (collisionSettings) {
@@ -1239,7 +1252,7 @@ Script.include(Script.resolvePath("./VectorMath.js"));
                         "damping": joint.node.damping,
                         "inertia": joint.node.inertia,
                         "delta": joint.node.delta,
-                        "stiffness": ISOLATED_JOINT_STIFFNESS
+                        "stiffness": ISOLATED_JOINT_STIFFNESS                   
                     }
                     var extraIndex = flowJointData.length;
                     flowJointData[extraIndex] = new FlowJointDummy(jointPosition, extraIndex, jointIndex, -1, settings);
@@ -1273,7 +1286,7 @@ Script.include(Script.resolvePath("./VectorMath.js"));
             var extraThread = new FlowThread(jointCount);
             flowThreads.push(extraThread);
         }
-        setFlowScale(MyAvatar.scale);
+        setFlowScale(avatarScale);
     };
     
 
@@ -1321,8 +1334,9 @@ Script.include(Script.resolvePath("./VectorMath.js"));
     });
     
     MyAvatar.scaleChanged.connect(function(){
+        avatarScale = MyAvatar.scale;
         if (isActive) {
-            setFlowScale(MyAvatar.scale);
+            setFlowScale(avatarScale);
         }
     });
     
@@ -1378,7 +1392,7 @@ Script.include(Script.resolvePath("./VectorMath.js"));
                             joint.stiffness = floatVal;
                         } else if (name === "radius") {
                             joint.node.initialRadius = floatVal;
-                            joint.node.radius = MyAvatar.scale*floatVal;
+                            joint.node.radius = avatarScale*floatVal;
                         } 
                         else {
                             joint.node[name] = floatVal;
